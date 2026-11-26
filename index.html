@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>データ保存テスト</title>
+<style>
+  body { background: #F6F3EB; color: #413C34; font-family: sans-serif; padding: 24px; max-width: 600px; margin: auto; }
+  input, button { box-sizing: border-box; width: 100%; padding: 14px; font-size: 18px; margin: 8px 0; border-radius: 8px; border: 1px solid #C9BDAF; }
+  button { background: #735640; color: white; cursor: pointer; }
+  button:disabled { opacity: .5; }
+  .card { background: #FFFEFA; padding: 20px; border-radius: 12px; margin-top: 16px; overflow-wrap: anywhere; }
+  #status { font-weight: bold; }
+</style>
+</head>
+<body>
+<h1>データ保存テスト</h1>
+<p>IndexedDBによる保存機能の検証</p>
+<div class="card">
+  <input id="text" placeholder="テスト用の文字を入力">
+  <button id="save" disabled>保存する</button>
+</div>
+<p id="status" role="status">読み込み中...</p>
+<div class="card">
+  <h3>保存されているデータ</h3>
+  <p id="result">確認中...</p>
+  <small id="time"></small>
+</div>
+<div class="card">
+  <small>保存環境の識別情報</small>
+  <p id="origin"></p>
+</div>
+<script>
+let db;
+const el = id => document.getElementById(id);
+function status(message, error = false) {
+  el('status').textContent = message;
+  el('status').style.color = error ? '#AC4C45' : '#477B60';
+}
+function show(data) {
+  el('result').textContent = data ? data.text : '保存データなし';
+  el('time').textContent = data ? '保存日時：' + data.time : '';
+  el('text').value = data ? data.text : '';
+}
+function start() {
+  el('origin').textContent = location.origin;
+  try {
+    const request = indexedDB.open('gas_storage_test_v1', 1);
+    request.onupgradeneeded = () => { request.result.createObjectStore('data'); };
+    request.onerror = () => status('データベースを開けません：' + request.error?.name, true);
+    request.onblocked = () => status('データベースが使用中です', true);
+    request.onsuccess = () => {
+      db = request.result;
+      const tx = db.transaction('data', 'readonly');
+      const read = tx.objectStore('data').get('memo');
+      tx.oncomplete = () => {
+        show(read.result);
+        status(read.result ? '保存データを読み込みました' : '保存データはありません');
+        el('save').disabled = false;
+      };
+      tx.onabort = () => status('読み込みに失敗しました', true);
+    };
+  } catch (e) { status('保存機能を利用できません：' + e.name, true); }
+}
+el('save').onclick = () => {
+  if (!db) return;
+  const data = { text: el('text').value, time: new Date().toLocaleString('ja-JP') };
+  try {
+    el('save').disabled = true;
+    const tx = db.transaction('data', 'readwrite');
+    tx.objectStore('data').put(data, 'memo');
+    tx.oncomplete = () => { show(data); status('保存に成功しました'); el('save').disabled = false; };
+    tx.onabort = () => { status('保存に失敗しました', true); el('save').disabled = false; };
+  } catch (e) { status('保存エラー：' + e.name, true); el('save').disabled = false; }
+};
+start();
+</script>
+</body>
+</html>
